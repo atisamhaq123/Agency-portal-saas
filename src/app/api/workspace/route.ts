@@ -21,13 +21,15 @@ export async function GET(request: Request) {
     const results = await Promise.all([
       db.from('projects').select('*').eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
       db.from('deliverables').select('*,projects!inner(workspace_id)').eq('projects.workspace_id', workspaceId).order('created_at', { ascending: false }),
-      db.from('activity').select('*,projects!inner(workspace_id)').eq('projects.workspace_id', workspaceId).order('created_at', { ascending: false }).limit(30)
+      db.from('activity').select('*,projects!inner(workspace_id)').eq('projects.workspace_id', workspaceId).order('created_at', { ascending: false }).limit(30),
+      db.from('project_messages').select('*,projects!inner(workspace_id)').eq('projects.workspace_id', workspaceId).order('created_at', { ascending: true }),
+      db.from('milestones').select('*,projects!inner(workspace_id)').eq('projects.workspace_id', workspaceId).order('due_date', { ascending: true, nullsFirst: false }).order('created_at', { ascending: true })
     ]);
     for (const result of results) if (result.error) throw result.error;
     const role = kind !== 'client' && workspace.owner_id === user.id ? 'owner' : 'client';
     const projects = results[0].data!.filter(project => role === 'owner' || project.client_email === user.email?.toLowerCase());
     const projectIds = new Set(projects.map(project => project.id));
-    return NextResponse.json({ workspace, projects, deliverables: results[1].data!.filter(item => projectIds.has(item.project_id)), activity: results[2].data!.filter(item => projectIds.has(item.project_id)), role, email: user.email }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ workspace, projects, deliverables: results[1].data!.filter(item => projectIds.has(item.project_id)), activity: results[2].data!.filter(item => projectIds.has(item.project_id)), messages: results[3].data!.filter(item => projectIds.has(item.project_id)), milestones: results[4].data!.filter(item => projectIds.has(item.project_id)), role, email: user.email }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Workspace load failed:', error instanceof Error ? error.message : 'Database request failed');
     const message = isAuthRetryableFetchError(error)

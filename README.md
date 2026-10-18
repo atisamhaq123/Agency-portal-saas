@@ -29,13 +29,23 @@ Without Supabase environment variables the workspace opens an interactive demo. 
 
 ## Connect Supabase
 
-1. For a fresh Supabase project, run only `supabase/migrations/001_clientnest.sql` in its SQL editor. This file includes the explicit account-flow changes. Existing databases that already applied the original 001 and account-flow migration 002 are up to date; do not rerun this fresh-install script on them.
+1. For a fresh Supabase project, run only `supabase/migrations/001_clientnest.sql` in its SQL editor. This file includes the explicit account-flow changes. Existing databases that already applied the original 001 and account-flow migration 002 need `supabase/upgrades/20261018_collaboration.sql` (if not already applied), followed by `supabase/upgrades/20261019_in_app_notifications.sql`. Run each upgrade once; do not rerun the fresh-install script on an existing database.
 2. Copy `.env.example` to `.env.local`. Set the public URL, anon/publishable key, service-role key, and application URL. Never expose the service-role key in a `NEXT_PUBLIC_` variable.
 3. Under Authentication → URL Configuration, set the Site URL to your application origin. Allow `http://localhost:3000/auth/callback` and `http://localhost:3000/auth/callback?recovery=1` during development; add equivalent production callbacks before deployment. Keep email confirmation enabled. Configure SMTP for reliable delivery.
 4. Restart the dev server after changing environment variables. Choose **I'm an Agency**, create an agency account, and confirm your email. The first authenticated agency workspace request provisions its workspace. Choosing **I'm a Client** never provisions an agency workspace.
 5. Create a project using a client's email. Open **Clients > Copy invitation link** and share the link with that client. It prefills the assigned email and targets the agency workspace. Login asks only for email and password; the server detects the account from ownership, verified email, and saved signup type. The agency/client choice appears only when creating an account. The client signs in or creates a client account, then verifies that exact email. Links are shared manually; the app does not send invitation emails. The link itself grants no access. Keep Supabase callback allowlists compatible with the role/workspace query parameters on `/auth/callback` (including password recovery).
 
 Owners create projects, change progress/status, and upload deliverables. Assigned clients approve or request changes with feedback. A reviewed deliverable is immutable; upload a new version as a new deliverable after changes. Each owner has one agency workspace. Invitation links select the assigned agency; without an invitation, login opens the agency owned by the account or the earliest assigned client workspace. Clients without assignments see the client dashboard with zero counts, empty project and file lists, and a Check again button. This does not create a workspace or grant agency permissions. Agency signup intent is saved on the account and used to provision its workspace automatically. Existing owners remain supported, including accounts created before account-type metadata existed. Accounts previously given an automatic workspace retain it; this migration does not delete existing workspaces. A new agency uses a separate agency signup account.
+
+## Project conversations, milestones, and in-app notifications
+
+Open a project to use its conversation and milestones. Agency owners add, complete, and remove milestones; assigned clients can read them. Both participants can post messages. Messages are immutable, stamped with the verified author email, and visible only within assigned projects. Use **Refresh updates** to fetch the latest messages and milestones. Demo collaboration is stored only in browser localStorage.
+
+The header bell opens an in-app notification inbox with unread counts, individual read controls, and **Mark all read**. New deliverables, client review decisions, project messages, and milestone creation/completion notify the other participant. Selecting a notification opens its project and marks it read. The inbox refreshes every 30 seconds while the tab is visible, on window focus, and when opened; it also has a manual refresh control.
+
+Notifications are created transactionally in PostgreSQL. Recipient-level row policies require both ownership of the notification and current project access. Clients who lose a project assignment can no longer read its notifications. Only read state can be updated by recipients; notification content cannot be forged from the browser.
+
+No Resend account, custom sending domain, email credentials, or notification cron is needed. Remove any old external scheduler targeting `/api/notifications`. Existing installations should apply `supabase/upgrades/20261019_in_app_notifications.sql` after the collaboration upgrade; it disables the old email trigger/worker and preserves historical outbox records without dispatching them. Fresh installs still use only `supabase/migrations/001_clientnest.sql`. Supabase Auth confirmation and password-reset emails remain part of authentication.
 
 ## Connect Stripe
 
@@ -49,7 +59,7 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 
 4. Subscribe through Plans & billing with a test account. Returning from checkout opens billing and checks the authenticated owner's customer subscriptions directly with Stripe before updating the database. Opening Plans & billing also reconciles a missed webhook, and checkout checks existing subscriptions to prevent another purchase while activation is pending. The redirect itself never grants a plan. Keep webhooks configured for renewals, payment failures, and cancellations while the owner is away. Manage payment methods, invoices, cancellation, and upgrades in the Stripe portal.
 
-The free workspace and Starter plan allow five projects; an active/trialing Pro subscription allows fifty. Limits include completed projects. A payment failure removes Pro entitlement after Stripe reports a non-active status; existing projects remain readable. This is an intentionally small v1 with no seats, Stripe Connect, invoice collection on behalf of agencies, custom domains, or notification emails.
+The free workspace and Starter plan allow five projects; an active/trialing Pro subscription allows fifty. Limits include completed projects. A payment failure removes Pro entitlement after Stripe reports a non-active status; existing projects remain readable. This is an intentionally small v1 with no seats, Stripe Connect, invoice collection on behalf of agencies, or custom domains.
 
 ## Security and data
 

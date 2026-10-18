@@ -37,6 +37,51 @@ before(async () => {
   await db.query("update auth.users set raw_user_meta_data=raw_user_meta_data || '{\"account_type\":\"agency\"}'::jsonb where id=$1", [ids.agencyNew]);
 });
 after(async()=>{ await db.close(); });
+test('project conversations verify authors and stay inside assigned projects', async()=>{
+  await as('ownerA');
+  const message = await scalar("insert into project_messages(project_id,body) values($1,'Please review the next direction.') returning id", [pa]);
+  await as('client');
+  assert.equal(await scalar('select count(*)::int from project_messages where id=$1', [message]), 1);
+  await db.query("insert into project_messages(project_id,body) values($1,'I will review it today.')", [pa]);
+  assert.equal(await scalar('select author_email from project_messages where author_id=$1', [ids.client]), 'client@test.example');
+  await assert.rejects(db.query("insert into project_messages(project_id,body,author_email) values($1,'Spoof','owner@test.example')", [pa]), /permission denied/);
+  await assert.rejects(db.query("insert into project_messages(project_id,body) values($1,'Intrusion')", [pb]), /row-level security/);
+  await assert.rejects(db.query("update project_messages set body='Changed' where id=$1", [message]), /permission denied/);
+  await as('other');
+  assert.equal(await scalar('select count(*)::int from project_messages where project_id=$1', [pa]), 0);
+  await as('unverified');
+  await assert.rejects(db.query("insert into project_messages(project_id,body) values($1,'Hello')", [pa]), /Verify your email/);
+});
+test('only project owners manage milestones; clients can read but cannot change them', async()=>{
+  await as('ownerA');
+  const milestone = await scalar("insert into milestones(project_id,title,due_date) values($1,'First direction','2026-12-01') returning id", [pa]);
+  await db.query('update milestones set completed=true where id=$1', [milestone]);
+  await as('client');
+  assert.equal(await scalar('select completed from milestones where id=$1', [milestone]), true);
+  assert.equal((await db.query('update milestones set completed=false where id=$1 returning id', [milestone])).rows.length, 0);
+  assert.equal((await db.query('delete from milestones where id=$1 returning id', [milestone])).rows.length, 0);
+  await assert.rejects(db.query("insert into milestones(project_id,title) values($1,'Client write')", [pa]), /row-level security/);
+  await as('ownerB');
+  assert.equal(await scalar('select count(*)::int from milestones where id=$1', [milestone]), 0);
+  await as('ownerA');
+  assert.equal((await db.query('delete from milestones where id=$1 returning id', [milestone])).rows.length, 1);
+});
+test('notifications are recipient-only and permit read-state updates only', async()=>{
+  await as('ownerA');
+  assert.equal(await scalar('select count(*)::int from notifications where event_key=$1', [`delivery:${delivery}:Pending`]),0);
+  await as('client');
+  const notification = (await db.query('select * from notifications where event_key=$1', [`delivery:${delivery}:Pending`])).rows[0];
+  assert.ok(notification);
+  assert.equal(notification.recipient_email,'client@test.example');
+  assert.equal(notification.read_at,null);
+  await db.query('update notifications set read_at=now() where id=$1',[notification.id]);
+  assert.ok(await scalar('select read_at from notifications where id=$1',[notification.id]));
+  await assert.rejects(db.query("update notifications set body='Forged' where id=$1",[notification.id]),/permission denied/);
+  await assert.rejects(db.query("insert into notifications(project_id,recipient_email,title,body,event_key) values($1,'client@test.example','Fake','Fake','fake')",[pa]),/permission denied/);
+  await as('ownerB');
+  assert.equal(await scalar('select count(*)::int from notifications where id=$1',[notification.id]),0);
+  assert.equal((await db.query('update notifications set read_at=now() where id=$1 returning id',[notification.id])).rows.length,0);
+});
 test('unassigned clients and legacy accounts never get an automatic agency workspace', async()=>{
   await as('unassigned');
   for (const kind of [null, 'client', 'agency']) assert.equal(await scalar('select bootstrap_workspace($1)', [kind]), null);
@@ -118,4 +163,19 @@ test('subscription sync is service-only, deduplicated, and ignores stale events'
   await assert.rejects(db.query("select sync_subscription($1,'wrong_customer','sub_a','active','pro','evt_wrong',110)",[wa]),/Invalid customer mapping/);
   await db.query("select sync_subscription($1,'cus_a','sub_a','canceled','free','evt_cancel',120)",[wa]);
   assert.equal(await scalar('select plan from workspaces where id=$1',[wa]),'free');
+});
+test('a client review creates one in-app notification for the agency owner',async()=>{
+  await as('ownerA');
+  const result = (await db.query('select * from notifications where event_key=$1', [`delivery:${delivery}:Approved`])).rows;
+  assert.equal(result.length,1);
+  assert.equal(result[0].recipient_id,ids.ownerA);
+  assert.equal(result[0].title,'Approved');
+  await as('client');
+  assert.equal(await scalar('select count(*)::int from notifications where id=$1',[result[0].id]),0);
+});
+test('notification access ends when a client is no longer assigned to the project',async()=>{
+  await as('ownerA');
+  await db.query("update projects set client_email='unassigned@test.example' where id=$1",[pa]);
+  await as('client');
+  assert.equal(await scalar('select count(*)::int from notifications where project_id=$1',[pa]),0);
 });

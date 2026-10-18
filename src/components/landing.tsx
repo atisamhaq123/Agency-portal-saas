@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { ArrowRight, ArrowUpRight, Check, CheckCheck, ChevronDown, FileText, FolderOpen, Layers3, Leaf, LockKeyhole, Menu, Orbit, Plus, ShieldCheck, Sparkles, Upload, Users, X } from 'lucide-react';
 
 const features = [
-  { icon: FolderOpen, title: 'Every project. One clear picture.', text: 'Give each engagement a home with its own brief, due date, progress, files, and client. Keep the next milestone in view.' },
+  { icon: FolderOpen, title: 'Every project. One clear picture.', text: 'Give each engagement a home with its own brief, milestones, deadlines, files, and client. Keep the next step in view.' },
   { icon: Users, title: 'A front door for your clients.', text: 'Share an invitation link. Clients sign in with their verified email and see the projects you have assigned to them.' },
   { icon: Upload, title: 'The right files, right here.', text: 'Upload deliverables up to 10 MB into private storage. Keep the work beside the project it belongs to.' },
-  { icon: CheckCheck, title: 'Feedback that moves work forward.', text: 'Clients approve a deliverable or request changes with a note. Each decision stays recorded with the work.' },
-  { icon: Orbit, title: 'Progress without the status chase.', text: 'Update project status and completion as work moves forward. Your clients can check in without another email thread.' },
+  { icon: CheckCheck, title: 'Feedback that moves work forward.', text: 'Clients approve a deliverable or request changes with a note. In-app notifications keep new files and review decisions on the radar.' },
+  { icon: Orbit, title: 'Progress without the status chase.', text: 'Track milestones, update progress, and talk through decisions in the project conversation. Keep the whole engagement connected.' },
   { icon: ShieldCheck, title: 'Access with clear boundaries.', text: 'Agencies manage their own workspace. Clients access assigned projects. Verified emails and database policies enforce access.' },
 ];
 const faqs = [
