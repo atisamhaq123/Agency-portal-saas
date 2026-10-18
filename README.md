@@ -29,13 +29,13 @@ Without Supabase environment variables the app opens an interactive demo. Demo p
 
 ## Connect Supabase
 
-1. Create a Supabase project and run `supabase/migrations/001_clientnest.sql` in its SQL editor.
+1. For a fresh Supabase project, run only `supabase/migrations/001_clientnest.sql` in its SQL editor. This file includes the explicit account-flow changes. Existing databases that already applied the original 001 and account-flow migration 002 are up to date; do not rerun this fresh-install script on them.
 2. Copy `.env.example` to `.env.local`. Set the public URL, anon/publishable key, service-role key, and application URL. Never expose the service-role key in a `NEXT_PUBLIC_` variable.
 3. Under Authentication → URL Configuration, set the Site URL to your application origin. Allow `http://localhost:3000/auth/callback` and `http://localhost:3000/auth/callback?recovery=1` during development; add equivalent production callbacks before deployment. Keep email confirmation enabled. Configure SMTP for reliable delivery.
-4. Restart the dev server after changing environment variables. Create an agency account and confirm your email. The first authenticated workspace request provisions its workspace.
-5. Create a project using a client's email. Share the application URL with the client. The client signs up and verifies that exact email to see assigned projects. There is no outbound invitation email feature in this version.
+4. Restart the dev server after changing environment variables. Choose **I'm an Agency**, create an agency account, and confirm your email. The first authenticated agency workspace request provisions its workspace. Choosing **I'm a Client** never provisions an agency workspace.
+5. Create a project using a client's email. Open **Clients > Copy invitation link** and share the link with that client. It prefills the assigned email and targets the agency workspace. Login asks only for email and password; the server detects the account from ownership, verified email, and saved signup type. The agency/client choice appears only when creating an account. The client signs in or creates a client account, then verifies that exact email. Links are shared manually; the app does not send invitation emails. The link itself grants no access. Keep Supabase callback allowlists compatible with the role/workspace query parameters on `/auth/callback` (including password recovery).
 
-Owners create projects, change progress/status, and upload deliverables. Assigned clients approve or request changes with feedback. A reviewed deliverable is immutable; upload a new version as a new deliverable after changes. Each owner has one agency workspace. A client assigned across multiple agencies currently opens the earliest assigned workspace; live workspace selection is a future enhancement.
+Owners create projects, change progress/status, and upload deliverables. Assigned clients approve or request changes with feedback. A reviewed deliverable is immutable; upload a new version as a new deliverable after changes. Each owner has one agency workspace. Invitation links select the assigned agency; without an invitation, login opens the agency owned by the account or the earliest assigned client workspace. Clients without assignments see the client dashboard with zero counts, empty project and file lists, and a Check again button. This does not create a workspace or grant agency permissions. Agency signup intent is saved on the account and used to provision its workspace automatically. Existing owners remain supported, including accounts created before account-type metadata existed. Accounts previously given an automatic workspace retain it; this migration does not delete existing workspaces. A new agency uses a separate agency signup account.
 
 ## Connect Stripe
 
@@ -59,7 +59,7 @@ The free workspace and Starter plan allow five projects; an active/trialing Pro 
 - Approval RPC validates the assigned client, required change-request feedback, and review state under a row lock.
 - Files are private, limited to 10 MB, and downloadable through short-lived signed URLs. Storage policies validate both workspace and project identifiers.
 - Stripe webhooks verify signatures, fetch current subscription state, deduplicate events, and reject older events/customer mismatches.
-- New accounts assigned to existing projects become clients; other accounts receive their own agency workspace. Demo mode contains no real customer data and is not authentication.
+- Account selection appears only during signup; database ownership and verified email determine permissions. Only explicit agency signups can provision a new workspace. Unassigned clients and legacy accounts without a workspace never receive an agency workspace automatically. Demo mode contains no real customer data and is not authentication.
 
 ## Validate and deploy
 

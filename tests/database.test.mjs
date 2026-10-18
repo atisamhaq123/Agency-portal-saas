@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 const db = new PGlite();
-const ids = { ownerA:'00000000-0000-0000-0000-000000000001', ownerB:'00000000-0000-0000-0000-000000000002', client:'00000000-0000-0000-0000-000000000003', other:'00000000-0000-0000-0000-000000000004', unverified:'00000000-0000-0000-0000-000000000005' };
+const ids = { ownerA:'00000000-0000-0000-0000-000000000001', ownerB:'00000000-0000-0000-0000-000000000002', client:'00000000-0000-0000-0000-000000000003', other:'00000000-0000-0000-0000-000000000004', unverified:'00000000-0000-0000-0000-000000000005', unassigned:'00000000-0000-0000-0000-000000000006', agencyNew:'00000000-0000-0000-0000-000000000007' };
 let wa, wb, pa, pb, delivery;
 async function as(user) { await db.exec('reset role'); await db.query("select set_config('request.jwt.claim.sub',$1,false)", [ids[user]]); await db.exec('set role authenticated'); }
 async function scalar(sql, args=[]) { return Object.values((await db.query(sql,args)).rows[0])[0]; }
@@ -23,6 +23,8 @@ before(async () => {
   sql = sql.replace('create extension if not exists pgcrypto;','');
   await db.exec(sql);
   for (const [name,id] of Object.entries(ids)) await db.query('insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values($1,$2,$3,$4)',[id,`${name}@test.example`,name==='unverified'?null:new Date().toISOString(),JSON.stringify({workspace_name:`Studio ${name}`})]);
+  // Owners created before migration keep access, while new agencies opt in.
+  await db.query("update auth.users set raw_user_meta_data=raw_user_meta_data || '{\"account_type\":\"agency\"}'::jsonb where id=any($1::uuid[])", [[ids.ownerA, ids.ownerB]]);
   await as('ownerA'); wa=await scalar('select public.bootstrap_workspace()');
   pa=await scalar("insert into projects(workspace_id,name,client_name,client_email,due_date) values($1,'Project A','Client','client@test.example','2026-12-01') returning id",[wa]);
   const path=`${wa}/${pa}/test.pdf`;
@@ -30,8 +32,34 @@ before(async () => {
   delivery=await scalar("insert into deliverables(project_id,name,file_path) values($1,'test.pdf',$2) returning id",[pa,path]);
   await as('ownerB'); wb=await scalar('select public.bootstrap_workspace()');
   pb=await scalar("insert into projects(workspace_id,name,client_name,client_email,due_date) values($1,'Project B','Other','other@test.example','2026-12-01') returning id",[wb]);
+  await db.exec('reset role');
+  await db.query("update auth.users set raw_user_meta_data=raw_user_meta_data - 'account_type' where id=$1", [ids.ownerA]);
+  await db.query("update auth.users set raw_user_meta_data=raw_user_meta_data || '{\"account_type\":\"agency\"}'::jsonb where id=$1", [ids.agencyNew]);
 });
 after(async()=>{ await db.close(); });
+test('unassigned clients and legacy accounts never get an automatic agency workspace', async()=>{
+  await as('unassigned');
+  for (const kind of [null, 'client', 'agency']) assert.equal(await scalar('select bootstrap_workspace($1)', [kind]), null);
+  assert.equal(await scalar('select count(*)::int from workspaces'), 0);
+  await assert.rejects(db.query("select bootstrap_workspace('admin')"), /Invalid account type/);
+});
+test('agency signup creates only its own workspace and client entry never provisions one', async()=>{
+  await as('agencyNew');
+  assert.equal(await scalar("select bootstrap_workspace('client')"), null);
+  const workspace = await scalar("select bootstrap_workspace('agency')");
+  assert.ok(workspace);
+  assert.equal(await scalar("select bootstrap_workspace('agency')"), workspace);
+  assert.equal(await scalar('select owner_id from workspaces where id=$1', [workspace]), ids.agencyNew);
+});
+test('portal choice and invitation workspace cannot grant access to another agency', async()=>{
+  await as('client');
+  assert.equal(await scalar("select bootstrap_workspace('client',$1)", [wa]), wa);
+  assert.equal(await scalar("select bootstrap_workspace('client',$1)", [wb]), null);
+  assert.equal(await scalar("select bootstrap_workspace('agency')"), null);
+  await as('ownerA');
+  assert.equal(await scalar("select bootstrap_workspace('agency')"), wa);
+  assert.equal(await scalar("select bootstrap_workspace('client')"), null);
+});
 test('owners see their own tenant and cannot modify billing entitlements', async()=>{
   await as('ownerA'); assert.equal(await scalar('select count(*)::int from projects'),1);
   assert.equal(await scalar('select count(*)::int from workspaces where id=$1',[wb]),0);

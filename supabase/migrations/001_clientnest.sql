@@ -70,16 +70,30 @@ grant insert on public.projects, public.deliverables to authenticated;
 grant update(name,client_name,client_email,category,description,status,progress,due_date,color) on public.projects to authenticated;
 grant all on public.workspaces, public.projects, public.deliverables, public.activity, public.stripe_events to service_role;
 
-create function public.bootstrap_workspace() returns uuid language plpgsql security definer set search_path = '' as $$
-declare workspace uuid; agency_name text;
+create function public.bootstrap_workspace(account_kind text default null, target_workspace uuid default null)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare workspace uuid; agency_name text; signup_kind text;
 begin
   if auth.uid() is null or public.verified_email() is null then raise exception 'Verify your email before continuing'; end if;
+  if account_kind is not null and account_kind not in ('agency','client') then raise exception 'Invalid account type'; end if;
   perform pg_advisory_xact_lock(hashtextextended(auth.uid()::text, 0));
-  select id into workspace from public.workspaces where owner_id=auth.uid();
-  if workspace is not null then return workspace; end if;
-  select workspace_id into workspace from public.projects where client_email=public.verified_email() order by created_at limit 1;
-  if workspace is not null then return workspace; end if;
-  select left(coalesce(nullif(trim(raw_user_meta_data->>'workspace_name'),''),'My Studio'),70) into agency_name from auth.users where id=auth.uid();
+  if account_kind is distinct from 'client' then
+    select id into workspace from public.workspaces where owner_id=auth.uid();
+    if workspace is not null then return workspace; end if;
+  end if;
+  if account_kind is distinct from 'agency' then
+    select workspace_id into workspace from public.projects
+      where client_email=public.verified_email() and (target_workspace is null or workspace_id=target_workspace)
+      order by created_at, id limit 1;
+    if workspace is not null then return workspace; end if;
+    if account_kind='client' then return null; end if;
+  end if;
+  select raw_user_meta_data->>'account_type',
+    left(coalesce(nullif(trim(raw_user_meta_data->>'workspace_name'),''),'My Studio'),70)
+    into signup_kind, agency_name from auth.users where id=auth.uid();
+  -- Signup intent may create only the caller's own workspace. It never grants
+  -- access to another workspace; ownership and verified email still enforce access.
+  if signup_kind is distinct from 'agency' then return null; end if;
   insert into public.workspaces(owner_id,name) values(auth.uid(),agency_name) returning id into workspace;
   return workspace;
 end;
@@ -145,8 +159,8 @@ end;
 $$;
 
 -- Restrict privileged RPCs. PostgreSQL grants function EXECUTE to PUBLIC by default.
-revoke execute on function public.verified_email(), public.owns_workspace(uuid), public.can_read_project(uuid), public.owns_project(uuid), public.can_read_workspace(uuid), public.bootstrap_workspace(), public.review_deliverable(uuid,text,text), public.check_project_limit(), public.log_project_activity(), public.sync_subscription(uuid,text,text,text,text,text,bigint) from public, anon, authenticated;
-grant execute on function public.verified_email(), public.owns_workspace(uuid), public.can_read_project(uuid), public.owns_project(uuid), public.can_read_workspace(uuid), public.bootstrap_workspace(), public.review_deliverable(uuid,text,text) to authenticated;
+revoke execute on function public.verified_email(), public.owns_workspace(uuid), public.can_read_project(uuid), public.owns_project(uuid), public.can_read_workspace(uuid), public.bootstrap_workspace(text,uuid), public.review_deliverable(uuid,text,text), public.check_project_limit(), public.log_project_activity(), public.sync_subscription(uuid,text,text,text,text,text,bigint) from public, anon, authenticated;
+grant execute on function public.verified_email(), public.owns_workspace(uuid), public.can_read_project(uuid), public.owns_project(uuid), public.can_read_workspace(uuid), public.bootstrap_workspace(text,uuid), public.review_deliverable(uuid,text,text) to authenticated;
 grant execute on function public.sync_subscription(uuid,text,text,text,text,text,bigint) to service_role;
 
 insert into storage.buckets(id,name,public,file_size_limit) values('deliverables','deliverables',false,10485760) on conflict(id) do nothing;
