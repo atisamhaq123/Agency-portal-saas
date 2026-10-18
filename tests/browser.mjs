@@ -7,7 +7,7 @@ const errors=[];
 try {
   const page=await browser.newPage({ viewport:{width:1440,height:1050}, deviceScaleFactor:1 });
   page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(baseUrl);
+  await page.goto(`${baseUrl}/portal?demo=1`);
   await page.getByRole('heading',{name:/Good things ahead/}).waitFor();
   await mkdir('artifacts',{recursive:true});
   await page.screenshot({path:'artifacts/desktop.png',fullPage:true});

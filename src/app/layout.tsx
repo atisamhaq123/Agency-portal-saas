@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import './futuristic.css';
 export const metadata: Metadata = { title: 'ClientNest — A little more together', description: 'Your agency, projects, files, and client approvals. One calm workspace.' };
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (

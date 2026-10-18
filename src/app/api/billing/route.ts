@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     }
     if (plan === 'portal') {
       if (!workspace.stripe_customer_id) return NextResponse.json({ error: 'Choose a plan before opening the billing portal.' }, { status: 400 });
-      const session = await stripe.billingPortal.sessions.create({ customer: workspace.stripe_customer_id, return_url: `${origin}/?billing=success` });
+      const session = await stripe.billingPortal.sessions.create({ customer: workspace.stripe_customer_id, return_url: `${origin}/portal?billing=success` });
       return NextResponse.json({ url: session.url });
     }
     if (plan !== 'starter' && plan !== 'pro') return NextResponse.json({ error: 'Choose a valid plan.' }, { status: 400 });
@@ -29,11 +29,11 @@ export async function POST(request: Request) {
       const customer = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
       const session = await stripe.billingPortal.sessions.create({
         customer,
-        return_url: `${origin}/?billing=success`,
+        return_url: `${origin}/portal?billing=success`,
         flow_data: {
           type: 'subscription_update_confirm',
           subscription_update_confirm: { subscription: subscription.id, items: [{ id: item.id, price, quantity: item.quantity || 1 }] },
-          after_completion: { type: 'redirect', redirect: { return_url: `${origin}/?billing=success` } },
+          after_completion: { type: 'redirect', redirect: { return_url: `${origin}/portal?billing=success` } },
         },
       });
       return NextResponse.json({ url: session.url });
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     if (['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete'].includes(subscription?.status || workspace.subscription_status)) return NextResponse.json({ error: 'Manage your existing subscription in the billing portal.' }, { status: 409 });
     let customer = workspace.stripe_customer_id;
     if (!customer) { const created = await stripe.customers.create({ email: user.email, name: workspace.name, metadata: { workspace_id: workspace.id } }, { idempotencyKey: `workspace-customer-${workspace.id}` }); customer = created.id; const { error } = await adminDb().from('workspaces').update({ stripe_customer_id: customer }).eq('id', workspace.id); if (error) throw error; }
-    const session = await stripe.checkout.sessions.create({ mode: 'subscription', customer, line_items: [{ price, quantity: 1 }], client_reference_id: workspace.id, subscription_data: { metadata: { workspace_id: workspace.id } }, success_url: `${origin}/?billing=success`, cancel_url: `${origin}/?billing=cancelled`, allow_promotion_codes: true }, { idempotencyKey: `checkout-${workspace.id}-${plan}-${Math.floor(Date.now() / 3600000)}` });
+    const session = await stripe.checkout.sessions.create({ mode: 'subscription', customer, line_items: [{ price, quantity: 1 }], client_reference_id: workspace.id, subscription_data: { metadata: { workspace_id: workspace.id } }, success_url: `${origin}/portal?billing=success`, cancel_url: `${origin}/portal?billing=cancelled`, allow_promotion_codes: true }, { idempotencyKey: `checkout-${workspace.id}-${plan}-${Math.floor(Date.now() / 3600000)}` });
     return NextResponse.json({ url: session.url });
   } catch (e) { const message = e instanceof Error ? e.message : 'Billing request failed'; const unauthorized = /Sign in|Only workspace owners/.test(message); console.error('Billing request failed:', unauthorized ? message : 'Stripe or database request failed'); return NextResponse.json({ error: unauthorized ? message : 'Could not open billing. Please check your Stripe configuration and try again.' }, { status: unauthorized ? 403 : 500 }); }
 }

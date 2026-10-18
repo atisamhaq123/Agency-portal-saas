@@ -23,9 +23,9 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
+Open http://localhost:3000 for the landing page. The workspace lives at `/portal`; `/portal?demo=1` opens the interactive demo, and `/portal?auth=signup` opens account creation. Existing invitation, recovery, and billing query links at the root redirect to the workspace. On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
 
-Without Supabase environment variables the app opens an interactive demo. Demo project creation, reviews, settings, and progress changes persist in browser localStorage. Sample downloads contain placeholder text; uploads retain file metadata only. Settings lets you switch owner/client views and reset demo data. The workspace selector contains a second sample agency to demonstrate tenant filtering.
+Without Supabase environment variables the workspace opens an interactive demo. Demo project creation, reviews, settings, and progress changes persist in browser localStorage. Sample downloads contain placeholder text; uploads retain file metadata only. Settings lets you switch owner/client views and reset demo data. The workspace selector contains a second sample agency to demonstrate tenant filtering.
 
 ## Connect Supabase
 
@@ -70,7 +70,7 @@ npm run build
 npm start
 ```
 
-With a production server running in demo mode, `npm run test:browser` checks the main user workflows and seven mobile views in installed Chrome. Set `CHROME_PATH` for another Chrome installation and `TEST_URL` for another port/origin. Screenshots are written to `artifacts/desktop.png` and `artifacts/mobile.png`.
+With a production server running in demo mode, `npm run test:browser` checks the main user workflows and seven mobile views in installed Chrome. Set `CHROME_PATH` for another Chrome installation and `TEST_URL` for another port/origin. Screenshots are written to `artifacts/desktop.png` and `artifacts/mobile.png`. Run `node tests/landing.browser.mjs` against the same demo server to check the landing page, responsive navigation, FAQs, and signup links; it writes landing screenshots to `artifacts/`. Actions such as sign-in, signup, uploads, reviews, downloads, saves, and billing show an animated status and prevent additional interactions until complete. Loading states clear on success and failure.
 
 Deploy to a Next.js-compatible Node host such as Vercel, with the environment variables from `.env.example`. Configure the final application origin in Supabase, `NEXT_PUBLIC_APP_URL`, and Stripe webhooks. Public Supabase environment variables must be present at build time. No live Supabase migration or Stripe configuration is applied automatically by this repository.
 
