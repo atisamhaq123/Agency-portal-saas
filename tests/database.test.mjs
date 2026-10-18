@@ -37,6 +37,12 @@ before(async () => {
   await db.query("update auth.users set raw_user_meta_data=raw_user_meta_data || '{\"account_type\":\"agency\"}'::jsonb where id=$1", [ids.agencyNew]);
 });
 after(async()=>{ await db.close(); });
+test('message realtime publication is configured and its upgrade can be rerun', async()=>{
+  await db.exec('reset role');
+  const sql=await readFile(new URL('../supabase/upgrades/20261019_realtime_messages.sql',import.meta.url),'utf8');
+  await db.exec(sql);
+  assert.equal(await scalar("select count(*)::int from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='project_messages'"),1);
+});
 test('project conversations verify authors and stay inside assigned projects', async()=>{
   await as('ownerA');
   const message = await scalar("insert into project_messages(project_id,body) values($1,'Please review the next direction.') returning id", [pa]);

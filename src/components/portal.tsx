@@ -72,7 +72,7 @@ export default function Portal() {
     return () => { active = false; setBusy(false); };
   }, [view, mode, data.role]);
   useEffect(() => { if (mode === 'demo') { try { const saved = localStorage.getItem('clientnest-demo-v1'); if (saved) setData(JSON.parse(saved)); } catch { /* use seed */ } } }, [mode]);
-  function update(next: PortalData) { setData(next); if (mode === 'demo') localStorage.setItem('clientnest-demo-v1', JSON.stringify(next)); }
+  function update(next: PortalData | ((current: PortalData) => PortalData)) { setData(current => { const resolved = typeof next === 'function' ? next(current) : next; if (mode === 'demo') localStorage.setItem('clientnest-demo-v1', JSON.stringify(resolved)); return resolved; }); }
   const projects = data.projects.filter(p => p.workspace_id === data.workspace.id && (data.role === 'owner' || p.client_email === data.email));
   const deliverables = data.deliverables.filter(d => projects.some(p => p.id === d.project_id));
   const pending = deliverables.filter(d => d.status === 'Pending');

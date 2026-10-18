@@ -282,3 +282,17 @@ create trigger delivery_notification after insert or update on public.deliverabl
 create trigger message_notification after insert on public.project_messages for each row execute function public.notify_project_event();
 create trigger milestone_notification after insert or update on public.milestones for each row execute function public.notify_project_event();
 commit;
+
+
+-- Live project conversations.
+-- Safe to run again. Existing message access policies also protect Realtime.
+do $$
+begin
+  if not exists(select 1 from pg_publication where pubname='supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+  if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='project_messages') then
+    alter publication supabase_realtime add table public.project_messages;
+  end if;
+end;
+$$;
